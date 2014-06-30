@@ -51,67 +51,117 @@
 
 otherwise you will have to commit by hand.")
 
-(defun git (cmd &rest args)
+(defcustom git-annex-debug-messages t
+  "If not nil, print git and git-annex commands to *Messages* buffer.")
+
+(defun debug-message (git-dir cmd args)
+  (when git-annex-debug-messages
+    (let* ((strargs (format "%s" args))
+           (pretty-args (substring strargs 1 (1- (length strargs)))))
+    (message "Annex operation: git --git-dir %s %s %s"
+             git-dir cmd pretty-args))))
+
+(defun git (git-dir cmd &rest args)
   (with-temp-buffer
-    (let* ((res (apply #'call-process "git" nil t nil cmd args))
+    (debug-message git-dir cmd args)
+    (let* ((res (apply #'call-process "git" nil t nil
+                       "--git-dir" git-dir cmd args))
            (msg (buffer-string)))
       (unless (zerop res)
         (message "Command \"git %s %s\" failed with error:\n  %s"
                  cmd args msg))
       (cons res msg))))
 
-(defun git-annex (cmd &rest args)
-  (apply #'git "annex" cmd args))
+(defun git-annex (git-dir cmd &rest args)
+  (apply #'git git-dir "annex" cmd args))
+
+(defun expand-symlinks (fname)
+  (let ((lnk (file-symlink-p fname)))
+    (if lnk
+        (if (string-match "\\.git/annex/" lnk)
+            fname
+          (expand-symlinks lnk))
+        fname)))
 
 (defun buffer-file-annexname (fname)
   (if fname
-      (let ((f (file-name-nondirectory fname))
-            (d (file-name-directory fname)))
+      (let* ((deref (expand-symlinks fname))
+             (f (file-name-nondirectory deref))
+             (d (file-name-directory deref)))
         (concat (file-truename d) f))))
 
-(defun was-modified (fname)
-  (not (string= (cdr (git "status" "-s" fname)) "")))
+(defun parent-directory (dir)
+  (if (not (equal "/" dir))
+    (file-name-directory (directory-file-name dir))))
 
-(defun git-annex-add-file (fname)
-  (git-annex "add" fname)
+(defun git-dir-of-file (fname)
+  (let ((d (parent-directory fname)))
+    (when d
+      (if (file-directory-p (concat d ".git/annex"))
+        (concat d ".git")
+        (git-dir-of-file d)))))
+
+(defun buffer-file-pathinfo (bufname)
+  "Return a list containing a git-annex-friendly absolute path to
+bufname and the git-dir absolute path.
+
+A git-annex-friendly path is one in which all the symlinks have
+been expanded except the one that points into
+.git/annex/objects/."
+  (let* ((path (buffer-file-annexname bufname))
+         (git-dir (git-dir-of-file path)))
+    (cons path git-dir)))
+
+(defun was-modified (path)
+  (let* ((fname (car path))
+         (git-dir (cdr path))
+         (msg (cdr (git git-dir "status" "-s" fname))))
+  (not (string= msg ""))))
+
+(defun git-annex-add-file (path)
+  (let ((fname (car path))
+        (git-dir (cdr path)))
+  (git-annex git-dir "add" fname)
   ;; "git commit" does not permit empty commits, so we check that
   ;; there's something to commit before trying.
-  (when git-annex-commit (and (was-modified fname))
-    (git "commit" "-m" "Updated")))
+  (when git-annex-commit (and (was-modified path))
+    (git git-dir "commit" "-m" "Updated"))))
 
-(defun revert-maintain-position ()
+(defun revert-while-maintaining-position ()
   (let ((here (point-marker)))
     (unwind-protect
         (revert-buffer nil t t)
       (goto-char here))))
 
-(defun unlock-annexed-file (fname)
-  (let ((target (nth 0 (file-attributes fname))))
-    (assert (stringp target))
-    (when (and (string-match "\\.git/annex/" target)
-               (zerop (git-annex "edit" fname)))
-      (revert-maintain-position)
+(defun unlock-annexed-file (path)
+  (let* ((fname (car path))
+         (git-dir (cdr path)))
+    (when (and (zerop (car (git-annex git-dir "edit" fname))))
+      (revert-while-maintaining-position)
       (add-hook 'kill-buffer-hook
-                #'(lambda () (git-annex-add-file fname))
+                #'(lambda () (git-annex-add-file path))
                 nil t)
       (setq buffer-read-only t))))
 
-(defun lock-annexed-file (fname)
-  (let ((res (git "diff-files" "--diff-filter=T"
+(defun lock-annexed-file (path)
+  (let ((res (git (cdr path)
+                  "diff-files" "--diff-filter=T"
                   "-G^[./]*\\.git/annex/objects/" "--name-only"
-                  "--" fname)))
+                  "--" (car path))))
     (unless (and (zerop (car res)) (string= (cdr res) ""))
-      (git-annex-add-file fname)
-      (revert-maintain-position)
+      (git-annex-add-file path)
+      (revert-while-maintaining-position)
       (setq buffer-read-only nil))))
 
 (defun git-annex-toggle-lock ()
-  (let ((fname (buffer-file-annexname buffer-file-name)))
-    (when (and fname (eq (vc-backend fname) 'Git))
+  (let* ((path (buffer-file-pathinfo buffer-file-name))
+         (fname (car path))
+         (git-dir (cdr path)))
+    (when (and fname git-dir)
       (cond ((and buffer-read-only (file-symlink-p fname))
-             (unlock-annexed-file fname))
+             (unlock-annexed-file path))
             ((and (not buffer-read-only) (not (file-symlink-p fname)))
-             (lock-annexed-file fname))))))
+             (lock-annexed-file path))))))
 
 ;; toggle-read-only is obsolete as of Emacs 24.3; C-x C-q is now bound
 ;; to read-only-mode.
