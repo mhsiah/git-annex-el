@@ -55,7 +55,7 @@ otherwise you will have to commit by hand.")
   (with-temp-buffer
     (let* ((res (apply #'call-process "git" nil t nil cmd args))
            (msg (buffer-string)))
-      (unless (eq res 0)
+      (unless (zerop res)
         (message "Command \"git %s %s\" failed with error:\n  %s"
                  cmd args msg))
       (cons res msg))))
@@ -89,7 +89,7 @@ otherwise you will have to commit by hand.")
   (let ((target (nth 0 (file-attributes fname))))
     (assert (stringp target))
     (when (and (string-match "\\.git/annex/" target)
-               (eq (git-annex "edit" fname) 0))
+               (zerop (git-annex "edit" fname)))
       (revert-maintain-position)
       (add-hook 'kill-buffer-hook
                 #'(lambda () (git-annex-add-file fname))
@@ -100,7 +100,7 @@ otherwise you will have to commit by hand.")
   (let ((res (git "diff-files" "--diff-filter=T"
                   "-G^[./]*\\.git/annex/objects/" "--name-only"
                   "--" fname)))
-    (unless (and (eq 0 (car res)) (string= (cdr res) ""))
+    (unless (and (zerop (car res)) (string= (cdr res) ""))
       (git-annex-add-file fname)
       (revert-maintain-position)
       (setq buffer-read-only nil))))
