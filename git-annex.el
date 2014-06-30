@@ -38,8 +38,8 @@
 ;;     @ e    Edit an annexed file
 
 (eval-when-compile
-  (require 'dired nil t)	      ; for variable dired-mode-map
-  (require 'dired-aux nil t)	      ; for function dired-relist-file
+  (require 'dired nil t)          ; for variable dired-mode-map
+  (require 'dired-aux nil t)      ; for function dired-relist-file
   (require 'cl))
 
 (defgroup git-annex nil
@@ -51,48 +51,76 @@
 
 otherwise you will have to commit by hand.")
 
-(defsubst git-annex (&rest args)
-  (apply #'call-process "git" nil nil nil "annex" args))
+(defun git (cmd &rest args)
+  (with-temp-buffer
+    (let* ((res (apply #'call-process "git" nil t nil cmd args))
+           (msg (buffer-string)))
+      (unless (eq res 0)
+        (message "Command \"git %s %s\" failed with error:\n  %s"
+                 cmd args msg))
+      (cons res msg))))
 
-(defun git-annex-add-file ()
-  (git-annex "add" (file-relative-name buffer-file-name default-directory))
-  (when git-annex-commit
-    (call-process "git" nil nil nil "commit" "-m" "Updated")))
+(defun git-annex (cmd &rest args)
+  (apply #'git "annex" cmd args))
 
+(defun buffer-file-annexname (fname)
+  (if fname
+      (let ((f (file-name-nondirectory fname))
+            (d (file-name-directory fname)))
+        (concat (file-truename d) f))))
+
+(defun was-modified (fname)
+  (not (string= (cdr (git "status" "-s" fname)) "")))
+
+(defun git-annex-add-file (fname)
+  (git-annex "add" fname)
+  ;; "git commit" does not permit empty commits, so we check that
+  ;; there's something to commit before trying.
+  (when git-annex-commit (and (was-modified fname))
+    (git "commit" "-m" "Updated")))
+
+(defun revert-maintain-position ()
+  (let ((here (point-marker)))
+    (unwind-protect
+        (revert-buffer nil t t)
+      (goto-char here))))
+
+(defun unlock-annexed-file (fname)
+  (let ((target (nth 0 (file-attributes fname))))
+    (assert (stringp target))
+    (when (and (string-match "\\.git/annex/" target)
+               (eq (git-annex "edit" fname) 0))
+      (revert-maintain-position)
+      (add-hook 'kill-buffer-hook
+                #'(lambda () (git-annex-add-file fname))
+                nil t)
+      (setq buffer-read-only t))))
+
+(defun lock-annexed-file (fname)
+  (let ((res (git "diff-files" "--diff-filter=T"
+                  "-G^[./]*\\.git/annex/objects/" "--name-only"
+                  "--" fname)))
+    (unless (and (eq 0 (car res)) (string= (cdr res) ""))
+      (git-annex-add-file fname)
+      (revert-maintain-position)
+      (setq buffer-read-only nil))))
+
+(defun git-annex-toggle-lock ()
+  (let ((fname (buffer-file-annexname buffer-file-name)))
+    (when (and fname (eq (vc-backend fname) 'Git))
+      (cond ((and buffer-read-only (file-symlink-p fname))
+             (unlock-annexed-file fname))
+            ((and (not buffer-read-only) (not (file-symlink-p fname)))
+             (lock-annexed-file fname))))))
+
+;; toggle-read-only is obsolete as of Emacs 24.3; C-x C-q is now bound
+;; to read-only-mode.
 (defadvice toggle-read-only (before git-annex-edit-file activate)
-  (when (string=
-		 (vc-backend buffer-file-name)
-		 "Git"
-		 )
-	  (when (and buffer-file-name buffer-read-only
-				 (file-symlink-p buffer-file-name))
-		(let ((target (nth 0 (file-attributes buffer-file-name))))
-		  (assert (stringp target))
-		  (when (string-match "\\.git/annex/" target)
-			(call-process "git" nil nil nil "annex" "edit"
-						  (file-relative-name buffer-file-name default-directory))
-			(let ((here (point-marker)))
-			  (unwind-protect
-				  (revert-buffer nil t t)
-				(goto-char here)))
-			(add-hook 'kill-buffer-hook 'git-annex-add-file nil t)
-			(setq buffer-read-only t))))
-	(when (and buffer-file-name (not buffer-read-only)
-			   (not (file-symlink-p buffer-file-name)))
-	  (let ((cur (current-buffer))
-			(name buffer-file-name)
-			(result))
-		(with-temp-buffer
-		  (call-process "git" nil t nil "diff-files" "--diff-filter=T" "-G^[./]*\\.git/annex/objects/" "--name-only" "--" (file-relative-name name default-directory))
-		  (setq result (buffer-string)))
-		(unless (string= result "")
-		  (git-annex-add-file)
-		  (let ((here (point-marker)))
-			(unwind-protect
-				(revert-buffer nil t t)
-			  (goto-char here)))
-		(setq buffer-read-only nil)))))
-  )
+  (git-annex-toggle-lock))
+
+(defadvice read-only-mode (before git-annex-edit-file activate)
+  (git-annex-toggle-lock))
+
 
 (defface git-annex-dired-annexed-available
   '((((class color) (background dark))
