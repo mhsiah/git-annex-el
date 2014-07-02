@@ -139,6 +139,7 @@ been expanded except the one that points into
     (when (and (zerop (car (git-annex git-dir "edit" fname))))
       (revert-while-maintaining-position)
       (add-hook 'kill-buffer-hook
+                ;; FIXME: This doesn't work because path won't be bound!
                 #'(lambda () (git-annex-add-file path))
                 nil t)
       (setq buffer-read-only t))))
