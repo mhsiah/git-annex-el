@@ -75,12 +75,20 @@ been expanded except the one that points into
 
 (make-variable-buffer-local 'buffer-file-annexname)
 
+(defun chomp (str)
+  "Chomp leading and tailing whitespace from STR."
+  (while (string-match "\\`\n+\\|^\\s-+\\|\\s-+$\\|\n+\\'"
+                       str)
+    (setq str (replace-match "" t t str)))
+  str)
+
 (defun debug-message (cmd args)
   (when git-annex-debug-messages
     (let* ((strargs (format "%s" args))
            (pretty-args (substring strargs 1 (1- (length strargs)))))
-    (message "Annex operation: git --git-dir %s %s %s"
-             buffer-git-dir cmd pretty-args))))
+    (message "Annex operation: git --git-dir %s --work-tree %s %s %s"
+             buffer-git-dir (parent-directory buffer-git-dir)
+             cmd pretty-args))))
 
 (defun git (cmd &rest args)
   "Run git command CMD with arguments ARGS."
@@ -88,8 +96,11 @@ been expanded except the one that points into
   (let ((dir buffer-git-dir))
     (with-temp-buffer
       (let* ((res (apply #'call-process "git" nil t nil
-                         "--git-dir" dir cmd args))
-             (msg (buffer-string)))
+                         "--git-dir" dir
+                         "--work-tree" (parent-directory dir)
+                         cmd args))
+             (msg (chomp (buffer-string))))
+        (message "Result: %s" msg)
         (unless (zerop res)
           (message "Command \"git %s %s\" failed with error:\n  %s"
                    cmd args msg))
