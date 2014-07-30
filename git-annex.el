@@ -166,7 +166,7 @@ GIT-ANNEX-COMMIT is true and the file had been modified."
   (git-annex "add" buffer-file-annexname)
   ;; "git commit" does not permit empty commits, so we check that
   ;; there's something to commit before trying.
-  (when git-annex-commit (and (buffer-was-modified))
+  (when (and git-annex-commit (buffer-was-modified))
     (git "commit" "-m" "Updated")))
 
 (defun revert-while-maintaining-position ()
