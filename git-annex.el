@@ -162,7 +162,7 @@ otherwise."
 
 (defun git-annex-add-file ()
   "Run 'git-annex add' on the current buffer, and 'git commit' if
-GIT-ANNEX-COMMIT is true and the file had been modified."
+GIT-ANNEX-COMMIT is true and the file has been modified."
   (git-annex "add" buffer-file-annexname)
   ;; "git commit" does not permit empty commits, so we check that
   ;; there's something to commit before trying.
