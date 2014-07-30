@@ -51,7 +51,7 @@
 
 otherwise you will have to commit by hand.")
 
-(defcustom git-annex-debug-messages t
+(defcustom git-annex-debug-messages nil
   "If not nil, print git and git-annex commands to *Messages* buffer.")
 
 ;; These two DEFVAR + MAKE-VARIABLE-BUFFER-LOCAL calls could be
