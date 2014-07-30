@@ -211,8 +211,8 @@ is managed by git-annex, toggle its locked status."
     (cond ((and buffer-read-only (file-symlink-p buffer-file-annexname))
            (unlock-annexed-file))
           ((and (not buffer-read-only) 
-                (not (file-symlink-p buffer-file-annexname))))
-          (t (lock-annexed-file)))))
+                (not (file-symlink-p buffer-file-annexname)))
+           (lock-annexed-file)))))
 
 ;; toggle-read-only is obsolete as of Emacs 24.3; C-x C-q is now bound
 ;; to read-only-mode.
