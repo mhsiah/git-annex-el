@@ -177,7 +177,10 @@ bufname and the git-annex-buffer-git-dir absolute path."
 
 (defun git-annex--buffer-was-modified ()
   "Return true iff git-annex thinks the buffer was modified."
-  (let ((msg (cdr (git "status" "-s" git-annex-buffer-file-annexname))))
+  (let ((msg (cdr (git "status" "-s" 
+                       ;; Shitty fix for dumb status :(
+                       (file-relative-name git-annex-buffer-file-annexname
+                                           (pwd))))))
     (not (string= msg ""))))
 
 (defun git-annex-add-file ()
