@@ -106,8 +106,8 @@ been expanded except the one that points into
                          "--work-tree" (parent-directory dir)
                          cmd args))
              (msg (git-annex--cleanup-message (buffer-string))))
-        (message "Result: %s" msg)
-        (unless (zerop res)
+        (if (zerop res)
+            (message "Result: %s" msg)
           (message "Command \"git %s %s\" failed with error:\n  %s"
                    cmd args msg))
         (cons res msg)))))
