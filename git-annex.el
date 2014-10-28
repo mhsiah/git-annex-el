@@ -66,10 +66,11 @@ git-annexed file.")
 (make-variable-buffer-local 'buffer-git-dir)
 
 (defvar buffer-file-annexname nil
-  "The git-annex-friendly name for the current buffer, if the
-current buffer is managed by git-annex, nil otherwise
+  "The git-annex-friendly name for the current buffer.
 
-A git-annex-friendly path is one in which all the symlinks have
+If the current buffer is managed by git-annex, return a
+git-annex-friendly name for it, otherwise return nil. A
+git-annex-friendly path is one in which all the symlinks have
 been expanded except the one that points into
 .git/annex/objects/.")
 
@@ -83,6 +84,7 @@ been expanded except the one that points into
   str)
 
 (defun debug-message (cmd args)
+  "Print a message describing the git call with CMD and ARGS."
   (when git-annex-debug-messages
     (let* ((strargs (format "%s" args))
            (pretty-args (substring strargs 1 (1- (length strargs)))))
@@ -210,7 +212,7 @@ is managed by git-annex, toggle its locked status."
   (when (buffer-is-annexed-p)
     (cond ((and buffer-read-only (file-symlink-p buffer-file-annexname))
            (unlock-annexed-file))
-          ((and (not buffer-read-only) 
+          ((and (not buffer-read-only)
                 (not (file-symlink-p buffer-file-annexname)))
            (lock-annexed-file)))))
 
