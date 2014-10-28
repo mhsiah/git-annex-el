@@ -1,6 +1,7 @@
 ;;; git-annex.el --- Mode for easy editing of git-annex'd files
 
 ;; Copyright (C) 2012 John Wiegley
+;; Copyright (C) 2014 Hamish Ivey-Law
 
 ;; Author: John Wiegley <jwiegley@gmail.com>
 ;; Created: 20 Oct 2012
