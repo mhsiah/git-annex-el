@@ -72,7 +72,7 @@ GIT-ANNEX-BUFFER-WORK-DIR/.git is its GITDIR.")
 
 (defun git-annex--buffer-git-dir ()
   (when git-annex--buffer-work-dir
-    (concat git-annex--buffer-work-dir "/.git")))
+    (concat git-annex--buffer-work-dir ".git")))
 
 (defvar git-annex-buffer-file-annexname nil
   "The git-annex-friendly name for the current buffer.
@@ -185,7 +185,7 @@ GIT-ANNEX-COMMIT is true and the file has been modified."
   ;; "git commit" does not permit empty commits, so we check that
   ;; there's something to commit before trying.
   (when (and git-annex-commit (git-annex--buffer-was-modified))
-    (git "commit" "-m" "Updated" git-annex-buffer-file-annexname)))
+    (git "commit" "-m" "Updated")))
 
 (defun git-annex--revert-while-maintaining-position ()
   "Revert the current buffer while attempting to maintain the
