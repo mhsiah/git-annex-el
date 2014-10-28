@@ -83,7 +83,9 @@ git-annex-friendly name for it, otherwise return nil. A
 git-annex-friendly path is one in which all the symlinks have
 been expanded except the one that points into
 GIT-ANNEX-BUFFER-WORK-DIR/.git/annex/objects/.  The name is
-always relative to GIT-ANNEX-BUFFER-WORK-DIR.")
+always absolute and so must start with
+GIT-ANNEX-BUFFER-WORK-DIR (we can't use the relative name because
+'git ls-files' doesn't respect --git-dir and --work-tree).")
 
 (make-variable-buffer-local 'git-annex-buffer-file-annexname)
 
@@ -170,9 +172,8 @@ git-annex repository that manages FNAME, or nil if not found."
 (defun git-annex--buffer-file-pathinfo ()
   "Return a list containing a git-annex-friendly absolute path to
 bufname and the git-annex-buffer-git-dir absolute path."
-  (let* ((absname (git-annex--buffer-file-truename buffer-file-name))
-         (d (git-annex--work-tree-of-file absname)))
-    (cons (file-relative-name absname d) d)))
+  (let ((absname (git-annex--buffer-file-truename buffer-file-name)))
+    (cons absname (git-annex--work-tree-of-file absname))))
 
 (defun git-annex--buffer-was-modified ()
   "Return true iff git-annex thinks the buffer was modified."
@@ -230,9 +231,10 @@ the functionality."
   "Toggle whether the current buffer is read-only; if the buffer
 is managed by git-annex, toggle its locked status."
   (when (git-annex-buffer-is-annexed-p)
-    (cond ((and buffer-read-only (file-symlink-p git-annex-buffer-file-annexname))
+    (cond ((and buffer-read-only 
+                (file-symlink-p git-annex-buffer-file-annexname))
            (git-annex-unlock-annexed-file))
-          ((and (not buffer-read-only)
+          ((and (not buffer-read-only) 
                 (not (file-symlink-p git-annex-buffer-file-annexname)))
            (git-annex-lock-annexed-file)))))
 
