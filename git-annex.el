@@ -92,6 +92,10 @@ been expanded except the one that points into
              git-annex-buffer-git-dir (parent-directory git-annex-buffer-git-dir)
              cmd pretty-args))))
 
+(defun git-annex--cleanup-message (msg)
+  "Convert a multi-line git message into a one-line git message."
+  (replace-regexp-in-string "\n" "; " (git-annex--chomp msg)))
+
 (defun git (cmd &rest args)
   "Run git command CMD with arguments ARGS."
   (git-annex--debug-message cmd args)
@@ -101,7 +105,7 @@ been expanded except the one that points into
                          "--git-dir" dir
                          "--work-tree" (parent-directory dir)
                          cmd args))
-             (msg (git-annex--chomp (buffer-string))))
+             (msg (git-annex--cleanup-message (buffer-string))))
         (message "Result: %s" msg)
         (unless (zerop res)
           (message "Command \"git %s %s\" failed with error:\n  %s"
@@ -169,7 +173,7 @@ GIT-ANNEX-COMMIT is true and the file has been modified."
   ;; "git commit" does not permit empty commits, so we check that
   ;; there's something to commit before trying.
   (when (and git-annex-commit (git-annex--buffer-was-modified))
-    (git "commit" "-m" "Updated")))
+    (git "commit" "-m" "Updated" git-annex-buffer-file-annexname)))
 
 (defun git-annex--revert-while-maintaining-position ()
   "Revert the current buffer while attempting to maintain the
