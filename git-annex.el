@@ -169,7 +169,9 @@ git-annex repository that manages FNAME, or nil if not found."
 bufname and the git-annex--buffer-work-dir absolute path."
   (let* ((absname (git-annex--buffer-file-truename buffer-file-name))
          (dir (git-annex--work-dir-of-file absname)))
-    (cons (file-relative-name absname dir) dir)))
+    (if dir
+        (cons (file-relative-name absname dir) dir)
+        (cons absname nil))))
 
 (defun git-annex--buffer-was-modified ()
   "Return true iff git-annex thinks the buffer was modified."
@@ -225,19 +227,20 @@ the functionality."
     (unless git-annex--buffer-file-annexname
       (let ((path (git-annex--buffer-file-pathinfo)))
         (setq git-annex--buffer-file-annexname (car path))
-        (setq git-annex--buffer-work-dir (or (cdr path) ""))))
-    (not (string= git-annex--buffer-work-dir ""))))
+        (setq git-annex--buffer-work-dir (cdr path))))
+    git-annex--buffer-work-dir))
 
 (defun git-annex-toggle-lock ()
   "Toggle whether the current buffer is read-only; if the buffer
 is managed by git-annex, toggle its locked status."
   (when (git-annex-buffer-is-annexed-p)
-    (cond ((and buffer-read-only 
-                (file-symlink-p git-annex--buffer-file-annexname))
-           (git-annex-unlock-annexed-file))
-          ((and (not buffer-read-only) 
-                (not (file-symlink-p git-annex--buffer-file-annexname)))
-           (git-annex-lock-annexed-file)))))
+    (let ((issymlnk (file-symlink-p
+                     (concat git-annex--buffer-file-annexname
+                             git-annex--buffer-work-dir))))
+      (cond ((and buffer-read-only issymlnk)
+             (git-annex-unlock-annexed-file))
+            ((not (or buffer-read-only issymlnk))
+             (git-annex-lock-annexed-file))))))
 
 ;; toggle-read-only is obsolete as of Emacs 24.3; C-x C-q is now bound
 ;; to read-only-mode.
@@ -306,7 +309,7 @@ is managed by git-annex, toggle its locked status."
   (let ((here (point)))
     (unwind-protect
         (mapc #'(lambda (file)
-                  (git-annex command file)
+                  (apply #'call-process "git" nil nil nil "annex" '(command file))
                   (dired-relist-file (expand-file-name file)))
               file-list)
       (goto-char here))))
