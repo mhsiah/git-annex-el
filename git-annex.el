@@ -235,8 +235,8 @@ the functionality."
 is managed by git-annex, toggle its locked status."
   (when (git-annex-buffer-is-annexed-p)
     (let ((issymlnk (file-symlink-p
-                     (concat git-annex--buffer-file-annexname
-                             git-annex--buffer-work-dir))))
+                     (concat git-annex--buffer-work-dir
+                             git-annex--buffer-file-annexname))))
       (cond ((and buffer-read-only issymlnk)
              (git-annex-unlock-annexed-file))
             ((not (or buffer-read-only issymlnk))
