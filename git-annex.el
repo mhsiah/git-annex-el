@@ -68,13 +68,6 @@ GIT-ANNEX-BUFFER-WORK-DIR/.git is its GITDIR.")
 
 (make-variable-buffer-local 'git-annex-buffer-work-dir)
 
-(defun git-annex--buffer-work-tree ()
-  git-annex--buffer-work-dir)
-
-(defun git-annex--buffer-git-dir ()
-  (when git-annex--buffer-work-dir
-    (concat git-annex--buffer-work-dir ".git")))
-
 (defvar git-annex-buffer-file-annexname nil
   "The git-annex-friendly name for the current buffer.
 
@@ -83,9 +76,7 @@ git-annex-friendly name for it, otherwise return nil. A
 git-annex-friendly path is one in which all the symlinks have
 been expanded except the one that points into
 GIT-ANNEX-BUFFER-WORK-DIR/.git/annex/objects/.  The name is
-always absolute and so must start with
-GIT-ANNEX-BUFFER-WORK-DIR (we can't use the relative name because
-'git ls-files' doesn't respect --git-dir and --work-tree).")
+always relative to GIT-ANNEX-BUFFER-WORK-DIR.")
 
 (make-variable-buffer-local 'git-annex-buffer-file-annexname)
 
@@ -101,35 +92,39 @@ GIT-ANNEX-BUFFER-WORK-DIR (we can't use the relative name because
   (when git-annex-debug-messages
     (let* ((strargs (format "%s" args))
            (pretty-args (substring strargs 1 (1- (length strargs)))))
-    (message "%s: git --git-dir %s --work-tree %s %s %s"
-             prefix
-             (git-annex--buffer-git-dir) (git-annex--buffer-work-tree)
-             cmd pretty-args))))
+    (message "%s: [in %s] git %s %s" 
+             prefix git-annex--buffer-work-dir cmd pretty-args))))
 
 (defun git-annex--cleanup-message (msg)
   "Convert a multi-line git message into a one-line git message."
   (replace-regexp-in-string "\n" "; " (git-annex--chomp msg)))
 
-(defun git (cmd &rest args)
+(defmacro git-annex--in-directory (d &rest body)
+  (let ((olddir (cl-gensym))
+        (res (cl-gensym)))
+    `(let ((,olddir default-directory))
+       (cd ,d)
+       (let ((,res (progn ,@body)))
+         (cd ,olddir)
+         ,res))))
+
+(defun git-annex--git (cmd &rest args)
   "Run git command CMD with arguments ARGS."
   (git-annex--message "Annex command" cmd args)
-  (with-temp-buffer
-    (let* ((res (apply #'call-process "git" nil t nil
-                       "--git-dir" (git-annex--buffer-git-dir)
-                       "--work-tree" (git-annex--buffer-work-tree)
-                       cmd args))
-           (msg (git-annex--cleanup-message (buffer-string))))
-      ;; FIXME: These should only be printed when
-      ;; GIT-ANNEX-DEBUG-MESSAGES is non-nil
-      (if (zerop res)
-          (message "Result: %s" msg)
-          (message "Command \"git %s %s\" failed with error: %s"
-                   cmd args msg))
-      (cons res msg))))
+  (git-annex--in-directory git-annex--buffer-work-dir
+    (with-temp-buffer
+      (let* ((res (apply #'call-process "git" nil t nil cmd args))
+             (msg (git-annex--cleanup-message (buffer-string))))
+        (when git-annex-debug-messages
+          (if (zerop res)
+              (message "Result: %s" msg)
+              (message "Command \"git %s %s\" failed with error: %s"
+                       cmd args msg)))
+        (cons res msg)))))
 
-(defun git-annex (cmd &rest args)
+(defun git-annex--git-annex (cmd &rest args)
   "Run git-annex command CMD with arguments ARGS."
-  (apply #'git "annex" cmd args))
+  (apply #'git-annex--git "annex" cmd args))
 
 (defun git-annex--expand-symlinks (fname)
   "If the filename FNAME refers to a symlink, expand it
@@ -160,37 +155,38 @@ directory of DIR, or nil if it is the root directory."
   (when (not (equal "/" dir))
     (file-name-directory (directory-file-name dir))))
 
-(defun git-annex--work-tree-of-file (fname)
+(defun git-annex--work-dir-of-file (fname)
   "Given a filename FNAME, return the path containing the
 git-annex repository that manages FNAME, or nil if not found."
   (let ((d (git-annex--parent-directory fname)))
     (when d
       (if (file-directory-p (concat d ".git/annex"))
           d
-          (git-annex--work-tree-of-file d)))))
+          (git-annex--work-dir-of-file d)))))
 
 (defun git-annex--buffer-file-pathinfo ()
   "Return a list containing a git-annex-friendly absolute path to
-bufname and the git-annex-buffer-git-dir absolute path."
-  (let ((absname (git-annex--buffer-file-truename buffer-file-name)))
-    (cons absname (git-annex--work-tree-of-file absname))))
+bufname and the git-annex--buffer-work-dir absolute path."
+  (let* ((absname (git-annex--buffer-file-truename buffer-file-name))
+         (dir (git-annex--work-dir-of-file absname)))
+    (cons (file-relative-name absname dir) dir)))
 
 (defun git-annex--buffer-was-modified ()
   "Return true iff git-annex thinks the buffer was modified."
-  (let ((msg (cdr (git "status" "-s" 
-                       ;; Shitty fix for dumb status :(
-                       (file-relative-name git-annex-buffer-file-annexname
-                                           (pwd))))))
+  (let ((msg (cdr (git-annex--git "status" "-s"
+                                  git-annex-buffer-file-annexname))))
     (not (string= msg ""))))
 
 (defun git-annex-add-file ()
   "Run 'git-annex add' on the current buffer, and 'git commit' if
 GIT-ANNEX-COMMIT is true and the file has been modified."
-  (git-annex "add" git-annex-buffer-file-annexname)
-  ;; "git commit" does not permit empty commits, so we check that
+  (git-annex--git-annex "add" git-annex-buffer-file-annexname)
+  ;; "git commit" returns an error (i.e. a non-zero return value to
+  ;; calling process) if there is nothing to commit, so we check that
   ;; there's something to commit before trying.
   (when (and git-annex-commit (git-annex--buffer-was-modified))
-    (git "commit" "-m" "Updated")))
+    (git-annex--git "commit" "-m" "Updated" "--"
+                    git-annex-buffer-file-annexname)))
 
 (defun git-annex--revert-while-maintaining-position ()
   "Revert the current buffer while attempting to maintain the
@@ -202,16 +198,18 @@ position of point."
 
 (defun git-annex-unlock-annexed-file ()
   "Unlock the git-annex-managed current buffer."
-  (when (zerop (car (git-annex "edit" git-annex-buffer-file-annexname)))
+  (when (zerop (car (git-annex--git-annex 
+                     "edit" git-annex-buffer-file-annexname)))
     (git-annex--revert-while-maintaining-position)
     (add-hook 'kill-buffer-hook #'git-annex-add-file nil t)
     (setq buffer-read-only t)))
 
 (defun git-annex-lock-annexed-file ()
   "Lock the git-annex-managed current buffer."
-  (let ((res (git "diff-files" "--diff-filter=T"
-                  "-G^[./]*\\.git/annex/objects/" "--name-only"
-                  "--" git-annex-buffer-file-annexname)))
+  (let ((res (git-annex--git
+              "diff-files" "--diff-filter=T"
+              "-G^[./]*\\.git/annex/objects/" "--name-only"
+              "--" git-annex-buffer-file-annexname)))
     (unless (and (zerop (car res)) (string= (cdr res) ""))
       (git-annex-add-file)
       (git-annex--revert-while-maintaining-position)
