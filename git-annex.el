@@ -66,9 +66,9 @@ git-annexed file.  Essentially GIT-ANNEX-BUFFER-WORK-DIR is the
 work tree associated with the annex and
 GIT-ANNEX-BUFFER-WORK-DIR/.git is its GITDIR.")
 
-(make-variable-buffer-local 'git-annex-buffer-work-dir)
+(make-variable-buffer-local 'git-annex--buffer-work-dir)
 
-(defvar git-annex-buffer-file-annexname nil
+(defvar git-annex--buffer-file-annexname nil
   "The git-annex-friendly name for the current buffer.
 
 If the current buffer is managed by git-annex, return a
@@ -78,7 +78,7 @@ been expanded except the one that points into
 GIT-ANNEX-BUFFER-WORK-DIR/.git/annex/objects/.  The name is
 always relative to GIT-ANNEX-BUFFER-WORK-DIR.")
 
-(make-variable-buffer-local 'git-annex-buffer-file-annexname)
+(make-variable-buffer-local 'git-annex--buffer-file-annexname)
 
 (defun git-annex--chomp (str)
   "Chomp leading and tailing whitespace from STR."
@@ -174,19 +174,19 @@ bufname and the git-annex--buffer-work-dir absolute path."
 (defun git-annex--buffer-was-modified ()
   "Return true iff git-annex thinks the buffer was modified."
   (let ((msg (cdr (git-annex--git "status" "-s"
-                                  git-annex-buffer-file-annexname))))
+                                  git-annex--buffer-file-annexname))))
     (not (string= msg ""))))
 
 (defun git-annex-add-file ()
   "Run 'git-annex add' on the current buffer, and 'git commit' if
 GIT-ANNEX-COMMIT is true and the file has been modified."
-  (git-annex--git-annex "add" git-annex-buffer-file-annexname)
+  (git-annex--git-annex "add" git-annex--buffer-file-annexname)
   ;; "git commit" returns an error (i.e. a non-zero return value to
   ;; calling process) if there is nothing to commit, so we check that
   ;; there's something to commit before trying.
   (when (and git-annex-commit (git-annex--buffer-was-modified))
     (git-annex--git "commit" "-m" "Updated" "--"
-                    git-annex-buffer-file-annexname)))
+                    git-annex--buffer-file-annexname)))
 
 (defun git-annex--revert-while-maintaining-position ()
   "Revert the current buffer while attempting to maintain the
@@ -199,7 +199,7 @@ position of point."
 (defun git-annex-unlock-annexed-file ()
   "Unlock the git-annex-managed current buffer."
   (when (zerop (car (git-annex--git-annex 
-                     "edit" git-annex-buffer-file-annexname)))
+                     "edit" git-annex--buffer-file-annexname)))
     (git-annex--revert-while-maintaining-position)
     (add-hook 'kill-buffer-hook #'git-annex-add-file nil t)
     (setq buffer-read-only t)))
@@ -209,7 +209,7 @@ position of point."
   (let ((res (git-annex--git
               "diff-files" "--diff-filter=T"
               "-G^[./]*\\.git/annex/objects/" "--name-only"
-              "--" git-annex-buffer-file-annexname)))
+              "--" git-annex--buffer-file-annexname)))
     (unless (and (zerop (car res)) (string= (cdr res) ""))
       (git-annex-add-file)
       (git-annex--revert-while-maintaining-position)
@@ -222,9 +222,9 @@ As a side effect, this function sets the variable
 GIT-ANNEX--WORK-DIR, which is necessary for most of the rest of
 the functionality."
   (when buffer-file-name
-    (unless git-annex-buffer-file-annexname
+    (unless git-annex--buffer-file-annexname
       (let ((path (git-annex--buffer-file-pathinfo)))
-        (setq git-annex-buffer-file-annexname (car path))
+        (setq git-annex--buffer-file-annexname (car path))
         (setq git-annex--buffer-work-dir (or (cdr path) ""))))
     (not (string= git-annex--buffer-work-dir ""))))
 
@@ -233,10 +233,10 @@ the functionality."
 is managed by git-annex, toggle its locked status."
   (when (git-annex-buffer-is-annexed-p)
     (cond ((and buffer-read-only 
-                (file-symlink-p git-annex-buffer-file-annexname))
+                (file-symlink-p git-annex--buffer-file-annexname))
            (git-annex-unlock-annexed-file))
           ((and (not buffer-read-only) 
-                (not (file-symlink-p git-annex-buffer-file-annexname)))
+                (not (file-symlink-p git-annex--buffer-file-annexname)))
            (git-annex-lock-annexed-file)))))
 
 ;; toggle-read-only is obsolete as of Emacs 24.3; C-x C-q is now bound
