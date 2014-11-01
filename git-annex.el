@@ -208,6 +208,7 @@ position of point."
 
 (defun git-annex-lock-annexed-file ()
   "Lock the git-annex-managed current buffer."
+  (save-buffer)
   (let ((res (git-annex--git
               "diff-files" "--diff-filter=T"
               "-G^[./]*\\.git/annex/objects/" "--name-only"
