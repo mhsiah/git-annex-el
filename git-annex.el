@@ -92,7 +92,7 @@ always relative to GIT-ANNEX-BUFFER-WORK-DIR.")
   (when git-annex-debug-messages
     (let* ((strargs (format "%s" args))
            (pretty-args (substring strargs 1 (1- (length strargs)))))
-    (message "%s: [in %s] git %s %s" 
+    (message "%s: [in %s] git %s %s"
              prefix git-annex--buffer-work-dir cmd pretty-args))))
 
 (defun git-annex--cleanup-message (msg)
@@ -198,14 +198,6 @@ position of point."
         (revert-buffer nil t t)
         (goto-char here))))
 
-(defun git-annex-unlock-annexed-file ()
-  "Unlock the git-annex-managed current buffer."
-  (when (zerop (car (git-annex--git-annex 
-                     "edit" git-annex--buffer-file-annexname)))
-    (git-annex--revert-while-maintaining-position)
-    (add-hook 'kill-buffer-hook #'git-annex-add-file nil t)
-    (setq buffer-read-only t)))
-
 (defun git-annex-lock-annexed-file ()
   "Lock the git-annex-managed current buffer."
   (save-buffer)
@@ -217,6 +209,14 @@ position of point."
       (git-annex-add-file)
       (git-annex--revert-while-maintaining-position)
       (setq buffer-read-only nil))))
+
+(defun git-annex-unlock-annexed-file ()
+  "Unlock the git-annex-managed current buffer."
+  (when (zerop (car (git-annex--git-annex
+                     "edit" git-annex--buffer-file-annexname)))
+    (git-annex--revert-while-maintaining-position)
+    (add-hook 'kill-buffer-hook #'git-annex-lock-annexed-file nil t)
+    (setq buffer-read-only t)))
 
 (defun git-annex-buffer-is-annexed-p ()
   "Return true iff the current buffer is managed by git-annex.
